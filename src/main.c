@@ -23,6 +23,7 @@
 
 #include "wrapper.c"
 #include "gmpackunpacker.h"
+#include "gmpackpacker.h"
 
 gint pack_unpack_test ()
 {
@@ -35,22 +36,24 @@ gint pack_unpack_test ()
                       "\xc0\x09\x1e\xb8\x51\xeb\x85\x1f";
   GmpackUnpacker *unpacker = gmpack_unpacker_new ();
   obj = gmpack_unpacker_unpack_string (G_OBJECT (unpacker), &data, length, &error);
+  g_object_unref (unpacker);
   if (obj != NULL) {
+    GmpackPacker *packer = gmpack_packer_new ();
     g_print ("Unpacked:\n");
     g_print ("%s\n", g_variant_print (obj, TRUE));
-    g_print ("%d\n", gmpack_unpacker_is_busy (G_OBJECT (unpacker)));
-    return 0;
 
-    /* length = lmpack_pack (obj, &str); */
-    /* if (length >= 0 && str != NULL) { */
-    /*   int index; */
-    /*   g_print ("Packed!\n"); */
-    /*   for (index = 0; index < length; ++index) { */
-    /*     printf ("%hhx ", str[index]); */
-    /*   } */
-    /*   printf ("\n"); */
-    /*   return 0; */
-    /* } */
+    error = NULL;
+    length = gmpack_packer_pack_variant (G_OBJECT (packer), obj, &str, &error);
+    g_object_unref (packer);
+    if (length >= 0 && str != NULL) {
+      int index;
+      g_print ("Packed:\n");
+      for (index = 0; index < length; ++index) {
+        printf ("%hhx ", str[index]);
+      }
+      printf ("\n");
+      return 0;
+    }
   }
   g_print ("Error!\n");
   return 1;

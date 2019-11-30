@@ -1,5 +1,6 @@
 gmpack_sources = [
   'mpack.c',
+  'gmpackpacker.c',
   'gmpackunpacker.c',
   'main.c'
 ]

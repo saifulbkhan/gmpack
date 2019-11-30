@@ -17,6 +17,7 @@
 
 #include <glib/gprintf.h>
 
+#include "common.h"
 #include "gmpackunpacker.h"
 #include "mpack.h"
 
@@ -73,20 +74,6 @@ GQuark
 gmpack_unpacker_error_quark (void)
 {
   return g_quark_from_static_string ("gmpack-unpacker-error-quark");
-}
-
-static mpack_parser_t *
-gmpack_grow_parser(mpack_parser_t *parser)
-{
-  mpack_parser_t *old = parser;
-  mpack_uint32_t new_capacity = old->capacity * 2;
-  parser = malloc(MPACK_PARSER_STRUCT_SIZE(new_capacity));
-  if (!parser) goto end;
-  mpack_parser_init(parser, new_capacity);
-  mpack_parser_copy(parser, old);
-  free(old);
-end:
-  return parser;
 }
 
 static void
