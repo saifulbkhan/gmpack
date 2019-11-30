@@ -16,35 +16,41 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "lmpack-wrapper-config.h"
+#include "gmpack-config.h"
 
 #include <glib.h>
 #include <stdlib.h>
 
 #include "wrapper.c"
+#include "gmpackunpacker.h"
 
 gint pack_unpack_test ()
 {
-  char *str = NULL;
-  int length = 0;
-  char *data = "\x92\x82\xa7\x63\x6f\x6d\x70\x61\x63\x74\xc3\xa6\x73\x63\x68\x65\x6d\x61\x00"
-               "\x82\xa0\xcf\xdc\xc8\x0c\xd4\x00\x00\x00\x00\xa6\x6e\x65\x67\x20\x50\x69\xcb"
-               "\xc0\x09\x1e\xb8\x51\xeb\x85\x1f";
-  size_t data_size = 46;
-  element_t *obj = NULL;
-  obj = lmpack_unpack (data, data_size);
+  GError *error;
+  GVariant *obj = NULL;
+  gchar *str = NULL;
+  gsize length = 46;
+  const gchar *data = "\x92\x82\xa7\x63\x6f\x6d\x70\x61\x63\x74\xc3\xa6\x73\x63\x68\x65\x6d\x61\x00"
+                      "\x82\xa0\xcf\xdc\xc8\x0c\xd4\x00\x00\x00\x00\xa6\x6e\x65\x67\x20\x50\x69\xcb"
+                      "\xc0\x09\x1e\xb8\x51\xeb\x85\x1f";
+  GmpackUnpacker *unpacker = gmpack_unpacker_new ();
+  obj = gmpack_unpacker_unpack_string (G_OBJECT (unpacker), &data, length, &error);
   if (obj != NULL) {
-    g_print ("Unpacked!\n");
-    length = lmpack_pack (obj, &str);
-    if (length >= 0 && str != NULL) {
-      int index;
-      g_print ("Packed!\n");
-      for (index = 0; index < length; ++index) {
-        printf ("%hhx ", str[index]);
-      }
-      printf ("\n");
-      return 0;
-    }
+    g_print ("Unpacked:\n");
+    g_print ("%s\n", g_variant_print (obj, TRUE));
+    g_print ("%d\n", gmpack_unpacker_is_busy (G_OBJECT (unpacker)));
+    return 0;
+
+    /* length = lmpack_pack (obj, &str); */
+    /* if (length >= 0 && str != NULL) { */
+    /*   int index; */
+    /*   g_print ("Packed!\n"); */
+    /*   for (index = 0; index < length; ++index) { */
+    /*     printf ("%hhx ", str[index]); */
+    /*   } */
+    /*   printf ("\n"); */
+    /*   return 0; */
+    /* } */
   }
   g_print ("Error!\n");
   return 1;

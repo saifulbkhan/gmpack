@@ -1,13 +1,15 @@
-lmpack_wrapper_sources = [
+gmpack_sources = [
   'mpack.c',
+  'gmpackunpacker.c',
   'main.c'
 ]
 
-lmpack_wrapper_deps = [
+gmpack_deps = [
   dependency('glib-2.0'),
+  dependency('gobject-2.0'),
 ]
 
-executable('lmpack-wrapper', lmpack_wrapper_sources,
-  dependencies: lmpack_wrapper_deps,
+executable('gmpack', gmpack_sources,
+  dependencies: gmpack_deps,
   install: true,
 )
