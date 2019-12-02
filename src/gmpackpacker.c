@@ -97,9 +97,11 @@ gmpack_unparse_enter (mpack_parser_t *parser,
                                     parent->tok.length);
       return;
     } else if (parent->tok.type == MPACK_TOKEN_EXT) {
-      /* TODO: correctly implement ext type */
-      node->tok = mpack_pack_chunk (g_variant_get_bytestring (parent_var),
-                                    parent->tok.length);
+      gchar *bytestring;
+      gint64 ext_code;
+      g_variant_get (parent_var, "(iay)", &ext_code, &bytestring);
+      node->tok = mpack_pack_chunk (bytestring, parent->tok.length);
+      g_free (bytestring);
       return;
     }
 
@@ -139,10 +141,12 @@ gmpack_unparse_enter (mpack_parser_t *parser,
     gsize length;
     g_free (g_variant_dup_string (var, &length));
     node->tok = mpack_pack_str (length);
-  /* TODO: implement packing for ext types */
-  /* } else if (var_type == ?) { */
-  /*   node->tok = mpack_pack_ext (var->ext_code, */
-  /*                              var->length); */
+  } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE ("(iay)"))) {
+    gchar *bytestring;
+    gint64 ext_code;
+    g_variant_get (var, "(iay)", &ext_code, &bytestring);
+    node->tok = mpack_pack_ext (ext_code, strlen(bytestring));
+    g_free (bytestring);
   } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE ("av"))) {
     node->tok = mpack_pack_array (g_variant_n_children (var));
   } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE ("a(vv)"))) {

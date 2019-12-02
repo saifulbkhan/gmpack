@@ -160,16 +160,12 @@ gmpack_parse_exit(mpack_parser_t *parser,
       unpacker->string_buffer = NULL;
       break;
     case MPACK_TOKEN_EXT:
-      var = g_variant_new_bytestring (g_strndup (unpacker->string_buffer,
-                                                 node->tok.length));
+      var = g_variant_new ("(iay)",
+                           node->tok.data.ext_type,
+                           g_strndup (unpacker->string_buffer,
+                                      node->tok.length));
       g_free (unpacker->string_buffer);
       unpacker->string_buffer = NULL;
-      if (node->tok.type == MPACK_TOKEN_EXT) {
-        /* TODO: support for ext types (use tuple of integer and bytestring)
-         * obj->type = ELEMENT_TYPE_EXT;
-         * obj->ext_code = node->tok.data.ext_type;
-         */
-      }
       break;
     case MPACK_TOKEN_ARRAY:
     case MPACK_TOKEN_MAP:
