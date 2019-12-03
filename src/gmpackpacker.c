@@ -151,7 +151,8 @@ gmpack_unparse_enter (mpack_parser_t *parser,
     node->tok = mpack_pack_array (g_variant_n_children (var));
   } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE ("a(vv)"))) {
     node->tok = mpack_pack_map (g_variant_n_children (var));
-  } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE ("mv"))){
+  } else {
+    g_warning ("Cannot serialize object, packing \"nil\" instead.\n");
     node->tok = mpack_pack_nil();
   }
 
