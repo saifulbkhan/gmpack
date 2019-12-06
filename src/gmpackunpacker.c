@@ -205,13 +205,12 @@ gmpack_parse_exit(mpack_parser_t *parser,
 }
 
 GVariant *
-gmpack_unpacker_unpack_string (GObject      *object,
-                               const gchar **string,
-                               gsize         length,
-                               GError      **error)
+gmpack_unpacker_unpack_string (GmpackUnpacker *self,
+                               const gchar   **string,
+                               gsize           length,
+                               GError        **error)
 {
   int result;
-  GmpackUnpacker *self = GMPACK_UNPACKER (object);
 
   if (self->unpacking) {
     g_set_error (error,
@@ -254,8 +253,7 @@ gmpack_unpacker_unpack_string (GObject      *object,
 }
 
 gboolean
-gmpack_unpacker_is_busy (GObject *object)
+gmpack_unpacker_is_busy (GmpackUnpacker *self)
 {
-  GmpackUnpacker *self = GMPACK_UNPACKER (object);
   return self->unpacking;
 }

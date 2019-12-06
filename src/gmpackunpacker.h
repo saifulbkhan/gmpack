@@ -37,11 +37,11 @@ typedef enum
 G_DECLARE_FINAL_TYPE (GmpackUnpacker, gmpack_unpacker, GMPACK, UNPACKER, GObject)
 
 GmpackUnpacker *gmpack_unpacker_new (void);
-GVariant *gmpack_unpacker_unpack_string (GObject      *object,
-                                         const gchar **string,
-                                         gsize         length,
-                                         GError      **error);
-gboolean gmpack_unpacker_is_busy (GObject *object);
+GVariant *gmpack_unpacker_unpack_string (GmpackUnpacker *object,
+                                         const gchar   **string,
+                                         gsize           length,
+                                         GError        **error);
+gboolean gmpack_unpacker_is_busy (GmpackUnpacker *object);
 
 G_END_DECLS
 

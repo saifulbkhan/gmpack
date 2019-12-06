@@ -35,7 +35,7 @@ gint pack_unpack_test ()
                       "\x82\xa0\xcf\xdc\xc8\x0c\xd4\x00\x00\x00\x00\xa6\x6e\x65\x67\x20\x50\x69\xcb"
                       "\xc0\x09\x1e\xb8\x51\xeb\x85\x1f";
   GmpackUnpacker *unpacker = gmpack_unpacker_new ();
-  obj = gmpack_unpacker_unpack_string (G_OBJECT (unpacker), &data, length, &error);
+  obj = gmpack_unpacker_unpack_string (unpacker, &data, length, &error);
   g_object_unref (unpacker);
   if (obj != NULL) {
     GmpackPacker *packer = gmpack_packer_new ();
@@ -43,7 +43,7 @@ gint pack_unpack_test ()
     g_print ("%s\n", g_variant_print (obj, TRUE));
 
     error = NULL;
-    length = gmpack_packer_pack_variant (G_OBJECT (packer), obj, &str, &error);
+    length = gmpack_packer_pack_variant (packer, obj, &str, &error);
     g_object_unref (packer);
     if (length >= 0 && str != NULL) {
       int index;

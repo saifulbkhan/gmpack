@@ -170,10 +170,10 @@ gmpack_unparse_exit (mpack_parser_t *parser,
 }
 
 gsize
-gmpack_packer_pack_variant (GObject   *object,
-                            GVariant  *variant,
-                            gchar    **str,
-                            GError   **error)
+gmpack_packer_pack_variant (GmpackPacker *self,
+                            GVariant     *variant,
+                            gchar       **str,
+                            GError      **error)
 {
   gint32 result = 1;
   gchar *final_buffer = NULL;
@@ -182,7 +182,6 @@ gmpack_packer_pack_variant (GObject   *object,
   gsize length = 0;
   gsize buffer_size = 0;
   gsize buffer_left = 0;
-  GmpackPacker *self = GMPACK_PACKER (object);
 
   if (self->packing) {
     g_set_error (error,
@@ -249,8 +248,7 @@ gmpack_packer_pack_variant (GObject   *object,
 }
 
 gboolean
-gmpack_packer_is_busy (GObject *object)
+gmpack_packer_is_busy (GmpackPacker *self)
 {
-  GmpackPacker *self = GMPACK_PACKER (object);
   return self->packing;
 }
