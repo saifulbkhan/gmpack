@@ -127,8 +127,12 @@ gmpack_unparse_enter (mpack_parser_t *parser,
   const GVariantType *var_type = g_variant_get_type (var);
   if (g_variant_type_equal (var_type, G_VARIANT_TYPE_BOOLEAN)) {
     node->tok = mpack_pack_boolean (g_variant_get_boolean (var));
+  } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE_UINT32)) {
+    node->tok = mpack_pack_uint (g_variant_get_uint32 (var));
   } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE_UINT64)) {
     node->tok = mpack_pack_uint (g_variant_get_uint64 (var));
+  } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE_INT32)) {
+    node->tok = mpack_pack_sint (g_variant_get_int32 (var));
   } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE_INT64)) {
     node->tok = mpack_pack_sint (g_variant_get_int64 (var));
   } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE_DOUBLE)) {
