@@ -22,7 +22,6 @@
 #include <glib/gprintf.h>
 #include <stdlib.h>
 
-#include "wrapper.c"
 #include "gmpackunpacker.h"
 #include "gmpackpacker.h"
 #include "gmpacksession.h"
