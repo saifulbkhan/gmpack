@@ -207,7 +207,7 @@ gmpack_parse_exit(mpack_parser_t *parser,
 GVariant *
 gmpack_unpacker_unpack_string (GmpackUnpacker *self,
                                const gchar   **string,
-                               gsize           length,
+                               gsize          *length,
                                GError        **error)
 {
   int result;
@@ -224,7 +224,7 @@ gmpack_unpacker_unpack_string (GmpackUnpacker *self,
     self->unpacking = TRUE;
     result = mpack_parse (self->parser,
                           string,
-                          &length,
+                          length,
                           gmpack_parse_enter,
                           gmpack_parse_exit);
 

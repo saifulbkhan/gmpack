@@ -19,11 +19,13 @@
 #include "gmpack-config.h"
 
 #include <glib.h>
+#include <glib/gprintf.h>
 #include <stdlib.h>
 
 #include "wrapper.c"
 #include "gmpackunpacker.h"
 #include "gmpackpacker.h"
+#include "gmpacksession.h"
 
 gint pack_unpack_test ()
 {
@@ -35,7 +37,7 @@ gint pack_unpack_test ()
                       "\x82\xa0\xcf\xdc\xc8\x0c\xd4\x00\x00\x00\x00\xa6\x6e\x65\x67\x20\x50\x69\xcb"
                       "\xc0\x09\x1e\xb8\x51\xeb\x85\x1f";
   GmpackUnpacker *unpacker = gmpack_unpacker_new ();
-  obj = gmpack_unpacker_unpack_string (unpacker, &data, length, &error);
+  obj = gmpack_unpacker_unpack_string (unpacker, &data, &length, &error);
   g_object_unref (unpacker);
   if (obj != NULL) {
     GmpackPacker *packer = gmpack_packer_new ();
@@ -61,106 +63,48 @@ gint pack_unpack_test ()
 
 gint session_test ()
 {
-  char *ret = NULL;
-  size_t ret_length = 0;
-  session_t *session = lmpack_session_new (NULL, NULL);
-  element_t *method = element_new ();
-  element_t *arguments = element_new ();
-  element_t *first_arg = element_new ();
-  element_t *second_arg = element_new ();
-  element_t *element = NULL;
+  GmpackSession* session = gmpack_session_new (NULL, NULL);
+  GVariant *method = g_variant_new_parsed ("'REQ'");
+  GVariant *arguments = g_variant_new_parsed ("[<1>, <uint64 18446744073709551615>]");
+  gchar *ret = NULL;
+  gsize ret_length = 0;
 
-  arguments->type = ELEMENT_TYPE_ARRAY;
-  element_create_array (arguments, 2);
-  element = element_at_index (arguments, 0);
-  element->data->p = first_arg;
-  element = element_at_index (arguments, 1);
-  element->data->p = second_arg;
-
-  method->type = ELEMENT_TYPE_STR;
-  method->data->p = "req1";
-  method->length = 4;
-  first_arg->type = ELEMENT_TYPE_SINT;
-  first_arg->data->i = -1;
-  second_arg->type = ELEMENT_TYPE_UINT;
-  second_arg->data->u = 1;
-  ret_length = lmpack_session_request (session,
+  ret_length = gmpack_session_request (session,
                                        method,
                                        arguments,
                                        NULL,
                                        &ret);
   if (ret_length != 0) {
     size_t index;
-    g_print ("Request 1 complete\n");
+    g_print ("Request sent: ");
     for (index = 0; index < ret_length; ++index) {
       printf ("%hhx ", ret[index]);
     }
     printf ("\n");
   }
 
-  method->type = ELEMENT_TYPE_STR;
-  method->data->p = "req2";
-  method->length = 4;
-  first_arg->type = ELEMENT_TYPE_SINT;
-  first_arg->data->i = -2;
-  second_arg->type = ELEMENT_TYPE_UINT;
-  second_arg->data->u = 2;
-  free(ret);
-  ret = NULL;
-  ret_length = lmpack_session_request (session,
-                                       method,
-                                       arguments,
-                                       NULL,
-                                       &ret);
-  if (ret_length != 0) {
-    size_t index;
-    g_print ("Request 2 complete\n");
-    for (index = 0; index < ret_length; ++index) {
-      printf ("%hhx ", ret[index]);
-    }
-    printf ("\n");
+  GmpackMessage *message = gmpack_session_receive (session,
+                                                   ret,
+                                                   ret_length,
+                                                   0,
+                                                   &ret_length);
+  if (gmpack_message_get_rpc_type (message)
+      == GMPACK_MESSAGE_RPC_TYPE_REQUEST) {
+    GVariant *received_method = gmpack_message_get_procedure (message);
+    GVariant *received_arguments = gmpack_message_get_args (message);
+    g_print ("Request received: ");
+    g_printf ("<%s %s> ",
+              g_variant_print (received_method, TRUE),
+              g_variant_print (received_arguments, TRUE));
+    g_printf ("| id = %d\n", gmpack_message_get_rpc_id (message));
   }
 
-  method->type = ELEMENT_TYPE_STR;
-  method->data->p = "req3";
-  method->length = 4;
-  first_arg->type = ELEMENT_TYPE_SINT;
-  first_arg->data->i = -3;
-  second_arg->type = ELEMENT_TYPE_UINT;
-  second_arg->data->u = 3;
-  free(ret);
-  ret = NULL;
-  ret_length = lmpack_session_request (session,
-                                       method,
-                                       arguments,
-                                       NULL,
-                                       &ret);
-  if (ret_length != 0) {
-    size_t index;
-    g_print ("Request 3 complete\n");
-    for (index = 0; index < ret_length; ++index) {
-      printf ("%hhx ", ret[index]);
-    }
-    printf ("\n");
-  }
+  g_variant_unref (method);
+  g_variant_unref (arguments);
+  g_object_unref (session);
+  g_object_unref (message);
+  g_free (ret);
 
-  transit_values_t values = lmpack_session_receive (session, ret, ret_length, 0);
-  if (values.msg_type == MPACK_RPC_REQUEST)
-    printf("request\n");
-  printf("%d\n", values.msg_id);
-  element_t *args_obj = values.args_or_result;
-  size_t index = 0;
-  for (index = 0; index < args_obj->length; ++index) {
-    element_t *elem = element_at_index (args_obj, index);
-    element_t *arg = elem->data->p;
-    if (arg->type == ELEMENT_TYPE_SINT)
-      printf ("%lli\n", arg->data->i);
-    if (arg->type == ELEMENT_TYPE_UINT)
-      printf ("%llu\n", arg->data->u);
-  }
-  printf ("\n");
-
-  lmpack_session_delete (session);
   return 0;
 }
 
