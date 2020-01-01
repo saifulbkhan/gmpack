@@ -64,7 +64,7 @@ gint session_test ()
 {
   GmpackSession* session = gmpack_session_new (NULL, NULL);
   GVariant *method = g_variant_new_parsed ("'REQ'");
-  GVariant *arguments = g_variant_new_parsed ("[<1>, <uint64 18446744073709551615>]");
+  GVariant *arguments = g_variant_new_parsed ("[<-1>, <uint64 18446744073709551615>]");
   gchar *ret = NULL;
   gsize ret_length = 0;
 

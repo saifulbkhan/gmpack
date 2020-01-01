@@ -25,12 +25,6 @@ struct _GmpackSession
 {
   GObject              parent_instance;
   mpack_rpc_session_t *session;
-  GmpackUnpacker      *unpacker;
-  GmpackPacker        *packer;
-  gint                 message_type;
-  mpack_rpc_message_t  rpc_message;
-  GVariant            *method_or_error;
-  GVariant            *args_or_result;
 };
 
 G_DEFINE_TYPE (GmpackSession, gmpack_session, G_TYPE_OBJECT)
@@ -49,19 +43,6 @@ gmpack_session_init (GmpackSession *self)
   }
 
   mpack_rpc_session_init(self->session, 0);
-  self->packer = gmpack_packer_new ();
-  self->unpacker = gmpack_unpacker_new ();
-  self->args_or_result = NULL;
-  self->method_or_error = NULL;
-  self->message_type = MPACK_EOF;
-}
-
-static void
-viewer_file_dispose (GObject *object)
-{
-  GmpackSession *self = GMPACK_SESSION (object);
-  g_clear_object (&self->packer);
-  g_clear_object (&self->unpacker);
 }
 
 static void
@@ -73,19 +54,9 @@ gmpack_session_finalize (GObject *object)
 }
 
 GmpackSession *
-gmpack_session_new (GmpackPacker *packer, GmpackUnpacker *unpacker)
+gmpack_session_new ()
 {
   GmpackSession *session = g_object_new (GMPACK_SESSION_TYPE, NULL);
-  if (packer != NULL) {
-    g_object_unref (session->packer);
-    session->packer = packer;
-    g_object_ref (session->packer);
-  }
-  if (unpacker != NULL) {
-    g_object_unref (session->unpacker);
-    session->unpacker = unpacker;
-    g_object_ref (session->unpacker);
-  }
   return session;
 }
 
@@ -110,28 +81,34 @@ gmpack_session_receive (GmpackSession *self,
                         gsize         *stop_pos)
 {
   GmpackMessage *message = gmpack_message_new ();
+  GmpackUnpacker *unpacker = gmpack_unpacker_new ();
+  GVariant *proc_or_error = NULL;
+  GVariant *args_or_result = NULL;
   GError *error = NULL;
   const gchar *buffer_init = data;
   const gchar *buffer = data + start_pos;
   gsize buffer_length = length - start_pos;
   gboolean done = FALSE;
+  gint message_type = MPACK_EOF;
+  mpack_rpc_message_t rpc_message;
 
   if (start_pos >= length) {
     g_error ("Offset must be less then the input string length.\n");
+    g_object_unref (unpacker);
     return message;
   }
 
   while (!done) {
     GVariant *unpacked;
-    if (self->message_type == MPACK_EOF) {
+    if (message_type == MPACK_EOF) {
       /* The starting header gives us the type of RPC request, unique
        * call ID and user data.
        */
-      self->message_type = mpack_rpc_receive (self->session,
-                                              &buffer,
-                                              &buffer_length,
-                                              &(self->rpc_message));
-      if (self->message_type == MPACK_EOF)
+      message_type = mpack_rpc_receive (self->session,
+                                        &buffer,
+                                        &buffer_length,
+                                        &rpc_message);
+      if (message_type == MPACK_EOF)
         break;
     }
 
@@ -141,7 +118,7 @@ gmpack_session_receive (GmpackSession *self,
      * If message is a response, then message data will be a result
      * or error object returned by the server.
      */
-    unpacked = gmpack_unpacker_unpack_string (self->unpacker,
+    unpacked = gmpack_unpacker_unpack_string (unpacker,
                                               &buffer,
                                               &buffer_length,
                                               &error);
@@ -150,42 +127,40 @@ gmpack_session_receive (GmpackSession *self,
       break;
     }
 
-    if (self->method_or_error == NULL) {
-      self->method_or_error = unpacked;
+    if (proc_or_error == NULL) {
+      proc_or_error = unpacked;
     } else {
-      self->args_or_result = unpacked;
+      args_or_result = unpacked;
       done = 1;
     }
   }
 
   *stop_pos = buffer - buffer_init;
   if (done) {
-    if (self->message_type == MPACK_RPC_REQUEST) {
+    if (message_type == MPACK_RPC_REQUEST) {
       gmpack_message_set_rpc_type (message,
                                    GMPACK_MESSAGE_RPC_TYPE_REQUEST);
-      gmpack_message_set_rpc_id (message, self->rpc_message.id);
-      gmpack_message_set_procedure (message, self->method_or_error);
-      gmpack_message_set_args (message, self->args_or_result);
-    } else if (self->message_type == MPACK_RPC_RESPONSE) {
+      gmpack_message_set_rpc_id (message, rpc_message.id);
+      gmpack_message_set_procedure (message, proc_or_error);
+      gmpack_message_set_args (message, args_or_result);
+    } else if (message_type == MPACK_RPC_RESPONSE) {
       gmpack_message_set_rpc_type (message,
                                    GMPACK_MESSAGE_RPC_TYPE_RESPONSE);
-      gmpack_message_set_result (message, self->args_or_result);
-      gmpack_message_set_error (message, self->method_or_error);
-      gmpack_message_set_data (message, self->rpc_message.data.p);
-    } else if (self->message_type == MPACK_RPC_NOTIFICATION) {
+      gmpack_message_set_result (message, args_or_result);
+      gmpack_message_set_error (message, proc_or_error);
+      gmpack_message_set_data (message, rpc_message.data.p);
+    } else if (message_type == MPACK_RPC_NOTIFICATION) {
       gmpack_message_set_rpc_type (message,
                                    GMPACK_MESSAGE_RPC_TYPE_NOTIFICATION);
-      gmpack_message_set_procedure (message, self->method_or_error);
-      gmpack_message_set_args (message, self->args_or_result);
+      gmpack_message_set_procedure (message, proc_or_error);
+      gmpack_message_set_args (message, args_or_result);
     } else {
       g_error ("An unexpected error occurred while deserializing (RPC) "
                "msgpack data.\n");
     }
-    self->method_or_error = NULL;
-    self->args_or_result = NULL;
-    self->message_type = MPACK_EOF;
   }
 
+  g_object_unref (unpacker);
   return message;
 }
 
@@ -194,9 +169,9 @@ gmpack_session_send (GmpackSession  *self,
                      GmpackMessage  *message,
                      gchar         **data)
 {
-  GError *error;
   GmpackMessageRpcType message_type = gmpack_message_get_rpc_type (message);
-  mpack_data_t d;
+  GmpackPacker *packer = gmpack_packer_new ();
+  GError *error;
   gsize pos = 0;
   gsize me_buffer_size = 0;
   gsize ar_buffer_size = 0;
@@ -208,6 +183,7 @@ gmpack_session_send (GmpackSession  *self,
   gchar *ar_buffer = NULL;
   gchar *final_buffer = NULL;
   gint result = -1;
+  mpack_data_t d;
 
   if (message_type == GMPACK_MESSAGE_RPC_TYPE_REQUEST)
     d.p = gmpack_message_get_data (message);
@@ -243,6 +219,7 @@ gmpack_session_send (GmpackSession  *self,
   if (result != MPACK_OK) {
     g_error ("An unexpected error occurred while serializing (RPC) msgpack "
              "data.\n");
+    g_object_unref (packer);
     return 0;
   }
 
@@ -253,20 +230,20 @@ gmpack_session_send (GmpackSession  *self,
    */
   if (message_type == GMPACK_MESSAGE_RPC_TYPE_REQUEST
       || message_type == GMPACK_MESSAGE_RPC_TYPE_NOTIFICATION) {
-    me_buffer_size = gmpack_packer_pack_variant (self->packer,
+    me_buffer_size = gmpack_packer_pack_variant (packer,
                                                  gmpack_message_get_procedure (message),
                                                  &me_buffer,
                                                  &error);
-    ar_buffer_size = gmpack_packer_pack_variant (self->packer,
+    ar_buffer_size = gmpack_packer_pack_variant (packer,
                                                  gmpack_message_get_args (message),
                                                  &ar_buffer,
                                                  &error);
   } else if (message_type == GMPACK_MESSAGE_RPC_TYPE_RESPONSE) {
-    ar_buffer_size = gmpack_packer_pack_variant (self->packer,
+    ar_buffer_size = gmpack_packer_pack_variant (packer,
                                                  gmpack_message_get_result (message),
                                                  &ar_buffer,
                                                  &error);
-    me_buffer_size = gmpack_packer_pack_variant (self->packer,
+    me_buffer_size = gmpack_packer_pack_variant (packer,
                                                  gmpack_message_get_error (message),
                                                  &me_buffer,
                                                  &error);
@@ -282,6 +259,8 @@ gmpack_session_send (GmpackSession  *self,
   free(me_buffer);
   free(ar_buffer);
   *data = final_buffer;
+
+  g_object_unref (packer);
   return pos + me_buffer_size + ar_buffer_size;
 }
 

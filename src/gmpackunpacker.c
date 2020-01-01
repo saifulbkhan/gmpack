@@ -57,7 +57,7 @@ gmpack_unpacker_finalize (GObject *object)
   GmpackUnpacker *self = GMPACK_UNPACKER (object);
 
   g_free (self->parser);
-  g_free (self->root);
+  g_variant_unref (self->root);
   g_free (self->string_buffer);
 
   G_OBJECT_CLASS (gmpack_unpacker_parent_class)->finalize (object);
@@ -200,7 +200,7 @@ gmpack_parse_exit(mpack_parser_t *parser,
       }
     }
   } else {
-    unpacker->root = var;
+    unpacker->root = g_variant_ref_sink (var);
   }
 }
 

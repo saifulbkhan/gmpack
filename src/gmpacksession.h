@@ -29,8 +29,7 @@ G_BEGIN_DECLS
 #define GMPACK_SESSION_TYPE gmpack_session_get_type ()
 G_DECLARE_FINAL_TYPE (GmpackSession, gmpack_session, GMPACK, SESSION, GObject)
 
-GmpackSession *gmpack_session_new (GmpackPacker   *packer,
-                                   GmpackUnpacker *unpacker);
+GmpackSession *gmpack_session_new ();
 GmpackMessage *gmpack_session_receive (GmpackSession *self,
                                        const gchar   *data,
                                        gsize          length,
