@@ -60,49 +60,156 @@ gint pack_unpack_test ()
   return 1;
 }
 
+static void
+receive_cb (GObject      *source_object,
+            GAsyncResult *res,
+            gpointer      user_data)
+{
+  GmpackSession *session;
+  GmpackMessage *message;
+  GError *error = NULL;
+
+  session = GMPACK_SESSION (source_object);
+  message = gmpack_session_receive_finish (session, res, &error);
+
+  if (!error) {
+    if (gmpack_message_get_rpc_type (message)
+        == GMPACK_MESSAGE_RPC_TYPE_REQUEST) {
+      g_print ("Request received: ");
+      g_printf ("%s | args = %s | id = %d\n",
+                g_variant_print (gmpack_message_get_procedure (message), TRUE),
+                g_variant_print (gmpack_message_get_args (message), TRUE),
+                gmpack_message_get_rpc_id (message));
+    } else if (gmpack_message_get_rpc_type (message)
+               == GMPACK_MESSAGE_RPC_TYPE_NOTIFICATION) {
+      g_print ("Notification received: ");
+      g_printf ("%s | args = %s\n",
+                g_variant_print (gmpack_message_get_procedure (message), TRUE),
+                g_variant_print (gmpack_message_get_args (message), TRUE));
+    } else if (gmpack_message_get_rpc_type (message)
+               == GMPACK_MESSAGE_RPC_TYPE_RESPONSE) {
+      g_print ("Response received: ");
+      g_printf ("%s | error = %s | data = %p\n",
+                g_variant_print (gmpack_message_get_result (message), TRUE),
+                g_variant_print (gmpack_message_get_error (message), TRUE),
+                gmpack_message_get_data (message));
+    }
+  } else {
+    g_printf ("Uh oh! Something went while receiving.\n");
+    g_error_free (error);
+  }
+  g_object_unref (message);
+}
+
+static gsize
+print_bytes (GBytes *bytes)
+{
+  gsize size = 0;
+  const gchar *arr = (const gchar *) g_bytes_get_data (bytes, &size);
+  size_t index;
+  for (index = 0; index < size; ++index)
+    g_printf ("%hhx ", arr[index]);
+  g_print ("\n");
+  return size;
+}
+
+static void
+send_cb (GObject      *source_object,
+         GAsyncResult *res,
+         gpointer      user_data)
+{
+  GmpackSession *session;
+  GBytes *data;
+  GError *error = NULL;
+  const gchar *msg_type = (gchar *) user_data;
+
+  session = GMPACK_SESSION (source_object);
+  if (g_strcmp0 (msg_type, "Request")) {
+    data = gmpack_session_request_finish (session, res, &error);
+  } else if (g_strcmp0 (msg_type, "Notification")) {
+    data = gmpack_session_notify_finish (session, res, &error);
+  } else if (g_strcmp0 (msg_type, "Response")) {
+    data = gmpack_session_respond_finish (session, res, &error);
+  } else {
+    g_print ("Unrecognized message type.");
+    return;
+  }
+
+  if (!error && g_bytes_get_size (data) != 0) {
+    gsize size = 0;
+
+    g_printf ("%s sent: ", msg_type);
+    size = print_bytes (data);
+    gmpack_session_receive_async (session,
+                                  data,
+                                  0,
+                                  &size,
+                                  NULL,
+                                  receive_cb,
+                                  NULL);
+  } else {
+    g_printf ("Uh oh! Something went wrong while sending.\n");
+    g_error_free (error);
+  }
+  /* TODO: Free data here. Make a copy when calling async functions. */
+}
+
+static void
+do_request (GmpackSession *session)
+{
+  GVariant *method = g_variant_new_parsed ("'REQUEST'");
+  GVariant *arguments = g_variant_new_parsed ("[<-1>, <uint64 18446744073709551615>]");
+
+  gmpack_session_request_async (session,
+                                method,
+                                arguments,
+                                NULL,
+                                NULL,
+                                send_cb,
+                                "Request");
+
+  /* TODO: Free methods and arguments here. Make a copy when calling async functions. */
+}
+
+static void
+do_notify (GmpackSession *session)
+{
+  GVariant *method = g_variant_new_parsed ("'NOTIFY'");
+  GVariant *arguments = g_variant_new_parsed ("[<'init'>, <'finished'>]");
+
+  gmpack_session_notify_async (session,
+                               method,
+                               arguments,
+                               NULL,
+                               send_cb,
+                               "Notification");
+
+  /* TODO: Free methods and arguments here. Make a copy when calling async functions. */
+}
+
+static void
+do_respond (GmpackSession *session)
+{
+  GVariant *result = g_variant_new_parsed ("'unrecognized procedure'");
+
+  gmpack_session_respond_async (session,
+                                0,
+                                result,
+                                TRUE,
+                                NULL,
+                                send_cb,
+                                "Response");
+
+  /* TODO: Free result here. Make a copy when calling async functions. */
+}
+
 gint session_test ()
 {
   GmpackSession* session = gmpack_session_new (NULL, NULL);
-  GVariant *method = g_variant_new_parsed ("'REQ'");
-  GVariant *arguments = g_variant_new_parsed ("[<-1>, <uint64 18446744073709551615>]");
-  gchar *ret = NULL;
-  gsize ret_length = 0;
 
-  ret_length = gmpack_session_request (session,
-                                       method,
-                                       arguments,
-                                       NULL,
-                                       &ret);
-  if (ret_length != 0) {
-    size_t index;
-    g_print ("Request sent: ");
-    for (index = 0; index < ret_length; ++index) {
-      printf ("%hhx ", ret[index]);
-    }
-    printf ("\n");
-  }
-
-  GmpackMessage *message = gmpack_session_receive (session,
-                                                   ret,
-                                                   ret_length,
-                                                   0,
-                                                   &ret_length);
-  if (gmpack_message_get_rpc_type (message)
-      == GMPACK_MESSAGE_RPC_TYPE_REQUEST) {
-    GVariant *received_method = gmpack_message_get_procedure (message);
-    GVariant *received_arguments = gmpack_message_get_args (message);
-    g_print ("Request received: ");
-    g_printf ("<%s %s> ",
-              g_variant_print (received_method, TRUE),
-              g_variant_print (received_arguments, TRUE));
-    g_printf ("| id = %d\n", gmpack_message_get_rpc_id (message));
-  }
-
-  g_variant_unref (method);
-  g_variant_unref (arguments);
-  g_object_unref (session);
-  g_object_unref (message);
-  g_free (ret);
+  do_request (session);
+  do_notify (session);
+  do_respond (session);
 
   return 0;
 }
@@ -110,5 +217,8 @@ gint session_test ()
 gint main (gint   argc,
            gchar *argv[])
 {
-  return pack_unpack_test () | session_test ();
+  gint status = pack_unpack_test () | session_test ();
+  GMainLoop *loop = g_main_loop_new(NULL, FALSE);
+  g_main_loop_run(loop);
+  return status;
 }
