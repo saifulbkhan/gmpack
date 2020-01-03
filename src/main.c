@@ -147,11 +147,11 @@ send_cb (GObject      *source_object,
                                   NULL,
                                   receive_cb,
                                   NULL);
+    g_bytes_unref (data);
   } else {
     g_printf ("Uh oh! Something went wrong while sending.\n");
     g_error_free (error);
   }
-  /* TODO: Free data here. Make a copy when calling async functions. */
 }
 
 static void
@@ -167,8 +167,6 @@ do_request (GmpackSession *session)
                                 NULL,
                                 send_cb,
                                 "Request");
-
-  /* TODO: Free methods and arguments here. Make a copy when calling async functions. */
 }
 
 static void
@@ -183,8 +181,6 @@ do_notify (GmpackSession *session)
                                NULL,
                                send_cb,
                                "Notification");
-
-  /* TODO: Free methods and arguments here. Make a copy when calling async functions. */
 }
 
 static void
@@ -199,8 +195,6 @@ do_respond (GmpackSession *session)
                                 NULL,
                                 send_cb,
                                 "Response");
-
-  /* TODO: Free result here. Make a copy when calling async functions. */
 }
 
 gint session_test ()

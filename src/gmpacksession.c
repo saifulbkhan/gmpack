@@ -186,6 +186,7 @@ gmpack_session_receive (GmpackSession  *self,
 static void
 receive_data_free (ReceiveData *receive_data)
 {
+  g_bytes_unref (receive_data->data);
   g_slice_free (ReceiveData, receive_data);
 }
 
@@ -222,10 +223,12 @@ gmpack_session_receive_async (GmpackSession       *self,
                               gpointer             user_data)
 {
   ReceiveData *receive_data;
+  GBytes *copied;
   GTask *task;
 
+  copied = g_bytes_new_from_bytes (data, 0, g_bytes_get_size (data));
   receive_data = g_slice_new (ReceiveData);
-  receive_data->data = data;
+  receive_data->data = copied;
   receive_data->start_pos = start_pos;
   receive_data->stop_pos = stop_pos;
 
