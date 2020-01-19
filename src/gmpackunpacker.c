@@ -246,6 +246,11 @@ gmpack_unpacker_unpack_string (GmpackUnpacker *self,
                  GMPACK_UNPACKER_ERROR,
                  GMPACK_UNPACKER_ERROR_INVALID,
                  "Invalid msgpack string.");
+  } else if (result == MPACK_EOF) {
+    g_set_error (error,
+                 GMPACK_UNPACKER_ERROR,
+                 GMPACK_UNPACKER_ERROR_EOF,
+                 "Incomplete msgpack string.");
   }
 
   self->unpacking = FALSE;

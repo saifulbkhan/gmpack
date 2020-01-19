@@ -93,18 +93,27 @@ gmpack_session_receive (GmpackSession  *self,
                         GError        **error)
 {
   GmpackMessage *message = gmpack_message_new ();
-  GmpackUnpacker *unpacker = gmpack_unpacker_new ();
+  GmpackUnpacker *unpacker = NULL;
   GVariant *proc_or_error = NULL;
   GVariant *args_or_result = NULL;
-  gsize length;
-  const gchar *buffer_init = g_bytes_get_data (data, &length);
-  const gchar *buffer = buffer_init + start_pos;
-  gsize buffer_length = length - start_pos;
+  GError *unpack_error = NULL;
+  gsize length = 0;
+  const gchar *buffer_init = NULL;
+  const gchar *buffer = NULL;
+  gsize buffer_length = 0;
   gboolean done = FALSE;
   gint message_type = MPACK_EOF;
   mpack_rpc_message_t rpc_message;
 
-  error = NULL;
+  buffer_init = g_bytes_get_data (data, &length);
+  if (buffer_init != NULL) {
+    buffer = buffer_init + start_pos;
+    buffer_length = length - start_pos;
+  } else {
+    return message;
+  }
+
+  unpacker = gmpack_unpacker_new ();
 
   if (start_pos >= length) {
     g_set_error (error,
@@ -129,7 +138,7 @@ gmpack_session_receive (GmpackSession  *self,
         break;
     }
 
-    /* The remaining of the message are message data. If the
+    /* The remaining part of the message data is its body. If the
      * message is a request or notification then message data will
      * be a procedure name followed by arguments for the procedure.
      * If message is a response, then message data will be a result
@@ -138,8 +147,9 @@ gmpack_session_receive (GmpackSession  *self,
     unpacked = gmpack_unpacker_unpack_string (unpacker,
                                               &buffer,
                                               &buffer_length,
-                                              error);
-    if (error != NULL) {
+                                              &unpack_error);
+    if (unpack_error != NULL) {
+      g_propagate_error (error, unpack_error);
       break;
     }
 
@@ -151,7 +161,9 @@ gmpack_session_receive (GmpackSession  *self,
     }
   }
 
-  *stop_pos = buffer - buffer_init;
+  if (stop_pos != NULL)
+    *stop_pos = buffer - buffer_init;
+
   if (done) {
     if (message_type == MPACK_RPC_REQUEST) {
       gmpack_message_set_rpc_type (message,

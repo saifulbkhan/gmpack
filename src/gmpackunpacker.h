@@ -30,6 +30,7 @@ typedef enum
   GMPACK_UNPACKER_ERROR_BUSY, /* unpacker is busy unpacking another string */
   GMPACK_UNPACKER_ERROR_PARSER, /* bad parser state, cannot proceed */
   GMPACK_UNPACKER_ERROR_INVALID, /* input string to be unpacked is not valid */
+  GMPACK_UNPACKER_ERROR_EOF, /* input string is incomplete msgpack */
   GMPACK_UNPACKER_ERROR_MISC /* unknown or miscellaneous error */
 } GmpackUnpackerError;
 
