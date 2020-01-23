@@ -142,7 +142,7 @@ send_cb (GObject      *source_object,
     return;
   }
 
-  if (!error && g_bytes_get_size (data) != 0) {
+  if (error == NULL && g_bytes_get_size (data) != 0) {
     g_printf ("%s sent: ", msg_type);
     print_bytes (data);
     gmpack_session_receive_async (session,
@@ -154,13 +154,15 @@ send_cb (GObject      *source_object,
                                   data);
   } else {
     g_printf ("Uh oh! Something went wrong while sending.\n");
-    g_error_free (error);
+    if (error != NULL)
+      g_error_free (error);
   }
 }
 
 static void
 do_request (GmpackSession *session)
 {
+  guint32 request_id = -1;
   GVariant *method = g_variant_new_parsed ("'REQUEST'");
   GVariant *arguments =
     g_variant_new_parsed ("[<-1>, <uint64 18446744073709551615>]");
@@ -169,6 +171,7 @@ do_request (GmpackSession *session)
                                 method,
                                 arguments,
                                 NULL,
+                                &request_id,
                                 NULL,
                                 send_cb,
                                 "Request");

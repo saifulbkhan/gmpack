@@ -59,11 +59,13 @@ GBytes *gmpack_session_request (GmpackSession  *self,
                                 GVariant       *method,
                                 GVariant       *args,
                                 gpointer        data,
+                                guint32        *request_id,
                                 GError        **error);
 void gmpack_session_request_async (GmpackSession       *self,
                                    GVariant            *method,
                                    GVariant            *args,
                                    gpointer             data,
+                                   guint32             *request_id,
                                    GCancellable        *cancellable,
                                    GAsyncReadyCallback  callback,
                                    gpointer             user_data);

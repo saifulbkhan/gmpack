@@ -17,7 +17,6 @@
 
 #include <glib/gprintf.h>
 
-#include "common.h"
 #include "gmpacksession.h"
 #include "mpack.h"
 
@@ -26,6 +25,25 @@ typedef struct {
   gsize   start_pos;
   gsize  *stop_pos;
 } ReceiveData;
+
+static void
+receive_data_free (ReceiveData *receive_data)
+{
+  g_bytes_unref (receive_data->data);
+  g_slice_free (ReceiveData, receive_data);
+}
+
+typedef struct {
+  GmpackMessage *message;
+  guint32       *request_id;
+} SendData;
+
+static void
+send_data_free (SendData *send_data)
+{
+  g_object_unref (send_data->message);
+  g_slice_free (SendData, send_data);
+}
 
 struct _GmpackSession
 {
@@ -176,6 +194,7 @@ gmpack_session_receive (GmpackSession  *self,
                                    GMPACK_MESSAGE_RPC_TYPE_RESPONSE);
       gmpack_message_set_result (message, args_or_result);
       gmpack_message_set_error (message, proc_or_error);
+      gmpack_message_set_rpc_id (message, rpc_message.id);
       gmpack_message_set_data (message, rpc_message.data.p);
     } else if (message_type == MPACK_RPC_NOTIFICATION) {
       gmpack_message_set_rpc_type (message,
@@ -196,13 +215,6 @@ gmpack_session_receive (GmpackSession  *self,
 }
 
 static void
-receive_data_free (ReceiveData *receive_data)
-{
-  g_bytes_unref (receive_data->data);
-  g_slice_free (ReceiveData, receive_data);
-}
-
-static void
 session_receive_thread (GTask         *task,
                         gpointer       source_object,
                         gpointer       task_data,
@@ -218,6 +230,7 @@ session_receive_thread (GTask         *task,
                                     receive_data->start_pos,
                                     receive_data->stop_pos,
                                     &error);
+
   if (!error) {
     g_task_return_pointer (task, message, g_object_unref);
   } else {
@@ -372,14 +385,20 @@ gmpack_session_request (GmpackSession  *self,
                         GVariant       *method,
                         GVariant       *args,
                         gpointer        data,
+                        guint32        *request_id,
                         GError        **error)
 {
+  GBytes *send_bytes;
   GmpackMessage *message = gmpack_message_new ();
   gmpack_message_set_rpc_type (message, GMPACK_MESSAGE_RPC_TYPE_REQUEST);
   gmpack_message_set_procedure (message, method);
   gmpack_message_set_args (message, args);
   gmpack_message_set_data (message, data);
-  return session_send (self, message, error);
+
+  *request_id = self->session->request_id;
+  send_bytes = session_send (self, message, error);
+
+  return send_bytes;
 }
 
 static void
@@ -389,12 +408,16 @@ session_send_thread (GTask         *task,
                      GCancellable  *cancellable)
 {
   GmpackSession *self = source_object;
-  GmpackMessage *message = task_data;
+  SendData *send_data = task_data;
   GError *error = NULL;
   GBytes *output;
 
+  if (gmpack_message_get_rpc_type (send_data->message)
+      == GMPACK_MESSAGE_RPC_TYPE_REQUEST) {
+    *send_data->request_id = self->session->request_id;
+  }
   output = session_send (self,
-                         message,
+                         send_data->message,
                          &error);
   if (!error) {
     g_task_return_pointer (task, output, g_object_unref);
@@ -404,24 +427,30 @@ session_send_thread (GTask         *task,
 }
 
 void
-gmpack_session_request_async (GmpackSession        *self,
-                              GVariant             *method,
-                              GVariant             *args,
-                              gpointer              data,
-                              GCancellable         *cancellable,
-                              GAsyncReadyCallback   callback,
-                              gpointer              user_data)
+gmpack_session_request_async (GmpackSession       *self,
+                              GVariant            *method,
+                              GVariant            *args,
+                              gpointer             data,
+                              guint32             *request_id,
+                              GCancellable        *cancellable,
+                              GAsyncReadyCallback  callback,
+                              gpointer             user_data)
 {
   GTask *task;
   GmpackMessage *message = gmpack_message_new ();
+  SendData *send_data = NULL;
 
   gmpack_message_set_rpc_type (message, GMPACK_MESSAGE_RPC_TYPE_REQUEST);
   gmpack_message_set_procedure (message, method);
   gmpack_message_set_args (message, args);
   gmpack_message_set_data (message, data);
 
+  send_data = g_slice_new0 (SendData);
+  send_data->message = message;
+  send_data->request_id = request_id;
+
   task = g_task_new (self, cancellable, callback, user_data);
-  g_task_set_task_data (task, message, (GDestroyNotify) g_object_unref);
+  g_task_set_task_data (task, send_data, (GDestroyNotify) send_data_free);
   g_task_run_in_thread (task, session_send_thread);
   g_object_unref (task);
 }
@@ -459,13 +488,18 @@ gmpack_session_notify_async (GmpackSession        *self,
 {
   GTask *task;
   GmpackMessage *message = gmpack_message_new ();
+  SendData *send_data = NULL;
 
   gmpack_message_set_rpc_type (message, GMPACK_MESSAGE_RPC_TYPE_NOTIFICATION);
   gmpack_message_set_procedure (message, method);
   gmpack_message_set_args (message, args);
 
+  send_data = g_slice_new0 (SendData);
+  send_data->message = message;
+  send_data->request_id = NULL;
+
   task = g_task_new (self, cancellable, callback, user_data);
-  g_task_set_task_data (task, message, (GDestroyNotify) g_object_unref);
+  g_task_set_task_data (task, send_data, (GDestroyNotify) send_data_free);
   g_task_run_in_thread (task, session_send_thread);
   g_object_unref (task);
 }
@@ -511,6 +545,7 @@ gmpack_session_respond_async (GmpackSession        *self,
 {
   GTask *task;
   GmpackMessage *message = gmpack_message_new ();
+  SendData *send_data = NULL;
 
   gmpack_message_set_rpc_type (message, GMPACK_MESSAGE_RPC_TYPE_RESPONSE);
   gmpack_message_set_rpc_id (message, request_id);
@@ -522,8 +557,12 @@ gmpack_session_respond_async (GmpackSession        *self,
     gmpack_message_set_error (message, g_variant_new_parsed ("@mv nothing"));
   }
 
+  send_data = g_slice_new0 (SendData);
+  send_data->message = message;
+  send_data->request_id = NULL;
+
   task = g_task_new (self, cancellable, callback, user_data);
-  g_task_set_task_data (task, message, (GDestroyNotify) g_object_unref);
+  g_task_set_task_data (task, send_data, (GDestroyNotify) send_data_free);
   g_task_run_in_thread (task, session_send_thread);
   g_object_unref (task);
 }
