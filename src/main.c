@@ -26,6 +26,7 @@
 #include "gmpackpacker.h"
 #include "gmpacksession.h"
 #include "gmpackserver.h"
+#include "gmpackclient.h"
 
 gint pack_unpack_test ()
 {
@@ -216,57 +217,69 @@ gint session_test ()
   return 0;
 }
 
-GVariant *
-request_handler (GList     *args,
-                 gpointer   user_data,
-                 GError   **error)
+static void
+client_request_cb (GObject      *object,
+                   GAsyncResult *result,
+                   gpointer      user_data)
 {
-  gint64 first = g_variant_get_int64 (args->data);
-  guint64 second = g_variant_get_uint64 (args->next->data);
-  return g_variant_new_boolean (first == second);
+  GError *error = NULL;
+  GVariant **response = user_data;
+  GmpackClient *client = GMPACK_CLIENT (object);
+
+  if (!gmpack_client_request_finish (client, result, &error)) {
+    if (error != NULL) {
+      g_error ("Error while request: %s\n", error->message);
+    } else {
+      g_print ("Error received: %s\n", g_variant_print (*response, TRUE));
+    }
+    return;
+  }
+
+  g_print ("Result received: %s\n", g_variant_print (*response, TRUE));
+  return;
 }
 
-GVariant *
-notification_handler (GList     *args,
-                      gpointer   user_data,
-                      GError   **error)
+void
+client_request ()
 {
-  const gchar *first = g_variant_get_string (args->data, NULL);
-  const gchar *second = g_variant_get_string (args->next->data, NULL);
-  g_print ("%s: %s\n", first, second);
-  return NULL;
-}
+  GVariant *result = NULL;
+  GVariant *arg = NULL;
+  GList *args = NULL;
+  GmpackClient *client = gmpack_client_new_for_tcp ("localhost", 1500);
 
-gboolean
-client_request (GMemoryInputStream *istream)
-{
-  const gchar *data = "\x94\x00\x00\xa7\x52\x45\x51\x55\x45\x53"
-                      "\x54\x92\xff\xcf\xff\xff\xff\xff\xff\xff"
-                      "\xff\xff";
-  g_memory_input_stream_add_data (istream, data, 22, NULL);
-  return TRUE;
+  arg = g_variant_new_parsed ("uint64 18446744073709551615");
+  args = g_list_prepend (args, arg);
+  arg = g_variant_new_parsed ("-1");
+  args = g_list_prepend (args, arg);
+
+  gmpack_client_request_async (client,
+                               "REQUEST",
+                               args,
+                               &result,
+                               NULL,
+                               client_request_cb,
+                               &result);
 }
 
 gboolean
 client_notify (GMemoryInputStream *istream)
 {
-  const gchar *data = "\x93\x02\xa6\x4e\x4f\x54\x49\x46\x59\x92"
-                      "\xa4\x69\x6e\x69\x74\xa8\x66\x69\x6e\x69"
-                      "\x73\x68\x65\x64";
-  g_memory_input_stream_add_data (istream, data, 24, NULL);
-  return TRUE;
-}
+  GError *error = NULL;
+  GVariant *arg = NULL;
+  GList *args = NULL;
+  GmpackClient *client = gmpack_client_new_for_tcp ("localhost", 1500);
 
-GMemoryInputStream *
-server_test ()
-{
-  GmpackServer *server = gmpack_server_new ();
-  GInputStream *istream = g_memory_input_stream_new ();
-  GIOStream *iostream = g_simple_io_stream_new (istream, NULL);
-  gmpack_server_bind (server, "REQUEST", request_handler, NULL, NULL);
-  gmpack_server_bind (server, "NOTIFY", notification_handler, NULL, NULL);
-  gmpack_server_accept_io_stream (server, iostream, NULL);
-  return (GMemoryInputStream *)istream;
+  arg = g_variant_new_parsed ("'init'");
+  args = g_list_append (args, arg);
+  arg = g_variant_new_parsed ("'finished'");
+  args = g_list_append (args, arg);
+
+  gmpack_client_notify (client, "NOTIFY", args, NULL, &error);
+  if (error != NULL) {
+    g_error ("Error while request: %s\n", error->message);
+    return FALSE;
+  }
+  return TRUE;
 }
 
 gboolean
@@ -282,10 +295,9 @@ gint main (gint   argc,
 {
   gint status = pack_unpack_test () | session_test ();
   GMainLoop *loop = g_main_loop_new(NULL, FALSE);
-  GMemoryInputStream *istream = server_test ();
-  g_timeout_add (500, (GSourceFunc) client_notify, istream);
-  g_timeout_add (1000, (GSourceFunc) client_request, istream);
-  g_timeout_add (5005, (GSourceFunc) exit_loop, loop);
+  g_timeout_add (500, (GSourceFunc) client_notify, NULL);
+  g_timeout_add (1000, (GSourceFunc) client_request, NULL);
+  g_timeout_add (5010, (GSourceFunc) exit_loop, loop);
   g_main_loop_run(loop);
   return status;
 }

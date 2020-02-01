@@ -516,7 +516,7 @@ gmpack_session_notify_finish (GmpackSession  *self,
 
 GBytes *
 gmpack_session_respond (GmpackSession  *self,
-                        gint32          request_id,
+                        guint32         request_id,
                         GVariant       *result,
                         gboolean        is_error,
                         GError        **error)
@@ -525,18 +525,20 @@ gmpack_session_respond (GmpackSession  *self,
   gmpack_message_set_rpc_type (message, GMPACK_MESSAGE_RPC_TYPE_RESPONSE);
   gmpack_message_set_rpc_id (message, request_id);
   if (is_error) {
-    gmpack_message_set_result (message, g_variant_new_parsed ("@mv nothing"));
+    gmpack_message_set_result (message,
+                               g_variant_new_maybe (G_VARIANT_TYPE_VARIANT, NULL));
     gmpack_message_set_error (message, result);
   } else {
     gmpack_message_set_result (message, result);
-    gmpack_message_set_error (message, g_variant_new_parsed ("@mv nothing"));
+    gmpack_message_set_error (message,
+                              g_variant_new_maybe (G_VARIANT_TYPE_VARIANT, NULL));
   }
   return session_send (self, message, error);
 }
 
 void
 gmpack_session_respond_async (GmpackSession        *self,
-                              gint32                request_id,
+                              guint32               request_id,
                               GVariant             *result,
                               gboolean              is_error,
                               GCancellable         *cancellable,
@@ -550,11 +552,13 @@ gmpack_session_respond_async (GmpackSession        *self,
   gmpack_message_set_rpc_type (message, GMPACK_MESSAGE_RPC_TYPE_RESPONSE);
   gmpack_message_set_rpc_id (message, request_id);
   if (is_error) {
-    gmpack_message_set_result (message, g_variant_new_parsed ("@mv nothing"));
+    gmpack_message_set_result (message,
+                               g_variant_new_maybe (G_VARIANT_TYPE_VARIANT, NULL));
     gmpack_message_set_error (message, result);
   } else {
     gmpack_message_set_result (message, result);
-    gmpack_message_set_error (message, g_variant_new_parsed ("@mv nothing"));
+    gmpack_message_set_error (message,
+                              g_variant_new_maybe (G_VARIANT_TYPE_VARIANT, NULL));
   }
 
   send_data = g_slice_new0 (SendData);

@@ -36,14 +36,14 @@ G_DECLARE_FINAL_TYPE (GmpackMessage, gmpack_message, GMPACK, MESSAGE, GObject)
 GmpackMessage *gmpack_message_new (void);
 void gmpack_message_set_rpc_type (GmpackMessage        *self,
                                   GmpackMessageRpcType  rpc_type);
-void gmpack_message_set_rpc_id (GmpackMessage *self, gint rpc_id);
+void gmpack_message_set_rpc_id (GmpackMessage *self, guint32 rpc_id);
 void gmpack_message_set_data (GmpackMessage *self, gpointer data);
 void gmpack_message_set_procedure (GmpackMessage *self, GVariant *procedure);
 void gmpack_message_set_args (GmpackMessage *self, GVariant *args);
 void gmpack_message_set_result (GmpackMessage *self, GVariant *result);
 void gmpack_message_set_error (GmpackMessage *self, GVariant *error);
 GmpackMessageRpcType gmpack_message_get_rpc_type (GmpackMessage *self);
-gint gmpack_message_get_rpc_id (GmpackMessage *self);
+guint32 gmpack_message_get_rpc_id (GmpackMessage *self);
 gpointer gmpack_message_get_data (GmpackMessage *self);
 GVariant *gmpack_message_get_procedure (GmpackMessage *self);
 GVariant *gmpack_message_get_args (GmpackMessage *self);

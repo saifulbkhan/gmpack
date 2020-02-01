@@ -16,28 +16,12 @@
  */
 
 #define DEFAULT_TCP_PORT 1000
-#define SINGLE_READ_COUNT 1024
 #define FIRST_HANDLER_ID 1
 
 #include <glib/gprintf.h>
 
 #include "common.h"
 #include "gmpackserver.h"
-#include "gmpacksession.h"
-
-typedef struct {
-  GByteArray    *pending_buffer;
-  gint16         priority;
-  GmpackSession *session;
-} ReadContext;
-
-static void
-read_context_free (gpointer data)
-{
-  ReadContext *context = data;
-  g_clear_object (&context->session);
-  g_slice_free (ReadContext, context);
-}
 
 typedef struct {
   GmpackServerHandler  handler;
@@ -59,7 +43,7 @@ method_data_free (gpointer data)
 typedef struct {
   MethodData           *method_data;
   GList                *args;
-  gint                  rpc_id;
+  guint32               rpc_id;
   GmpackMessageRpcType  rpc_type;
   GInputStream         *istream;
 } RpcData;
@@ -117,11 +101,11 @@ static void
 gmpack_server_finalize (GObject *object)
 {
   GmpackServer *self = GMPACK_SERVER (object);
+  gmpack_server_stop_listening (self);
   g_hash_table_destroy (self->connected_io_streams);
   g_hash_table_destroy (self->io_sessions);
   g_hash_table_destroy (self->bound_methods);
   g_hash_table_destroy (self->bound_method_data);
-  g_clear_object (&self->tcp_service);
   G_OBJECT_CLASS (gmpack_server_parent_class)->finalize (object);
 }
 
@@ -149,6 +133,7 @@ handle_call_thread (GTask         *task,
   g_assert (GMPACK_IS_SERVER (self));
   g_assert (rpc_data != NULL);
   g_assert (method_data != NULL);
+  g_assert (G_IS_INPUT_STREAM (rpc_data->istream));
 
   session = g_hash_table_lookup (self->io_sessions, rpc_data->istream);
   g_assert (session != NULL);
@@ -176,7 +161,9 @@ handle_call_thread (GTask         *task,
 
     ostream = g_hash_table_lookup (self->connected_io_streams,
                                    rpc_data->istream);
+
     g_return_if_fail (ostream != NULL);
+    g_assert (G_IS_OUTPUT_STREAM (ostream));
 
     g_output_stream_write_bytes_async (ostream,
                                        to_write,
@@ -218,7 +205,7 @@ static RpcData *
 rpc_data_from_message (GmpackServer *self,
                        GmpackMessage *message)
 {
-  gint rpc_id;
+  guint32 rpc_id;
   gchar *method;
   GList *args = NULL;
   GVariant *var = NULL;
@@ -268,147 +255,6 @@ rpc_data_from_message (GmpackServer *self,
 }
 
 static void
-read_cb (GObject      *object,
-         GAsyncResult *result,
-         gpointer      user_data)
-{
-  GInputStream *istream = (GInputStream *)object;
-  GCancellable *cancellable = NULL;
-  g_autoptr(GError) error = NULL;
-  GBytes *bytes = NULL;
-  GQueue *messages = NULL;
-  gsize parsed_length = 0;
-  GmpackSession *session = NULL;
-  ReadContext *context = NULL;
-  g_autoptr(GTask) task = user_data;
-
-  g_assert (G_IS_INPUT_STREAM (istream));
-  g_assert (G_IS_TASK (task));
-
-  context = g_task_get_task_data (task);
-  cancellable = g_task_get_cancellable (task);
-
-  session = context->session;
-
-  bytes = g_input_stream_read_bytes_finish (istream, result, &error);
-  if (bytes == NULL) {
-    if (error != NULL) {
-      g_task_return_error (task, g_steal_pointer (&error));
-    } else {
-      g_task_return_new_error (task,
-                               G_IO_ERROR,
-                               G_IO_ERROR_FAILED,
-                               "No data to read from peer");
-    }
-    return;
-  }
-
-  /* append to any previously pending buffer */
-  if (context->pending_buffer != NULL) {
-    gsize size = 0;
-    gpointer data = g_bytes_unref_to_data (bytes, &size);
-    g_byte_array_append (context->pending_buffer, data, size);
-    bytes = g_byte_array_free_to_bytes (context->pending_buffer);
-    context->pending_buffer = NULL;
-  }
-
-  if (bytes != NULL && g_bytes_get_size (bytes) != 0) {
-    gsize current_index = 0;
-    GmpackMessage *message = NULL;
-
-    messages = g_queue_new ();
-
-    while (parsed_length < g_bytes_get_size (bytes)) {
-      message = gmpack_session_receive (session,
-                                        bytes,
-                                        current_index,
-                                        &parsed_length,
-                                        &error);
-      if (error != NULL && error->code == GMPACK_UNPACKER_ERROR_EOF) {
-        if (parsed_length < g_bytes_get_size (bytes)) {
-          /* the data sent was incomplete and the rest of it is not
-           * a part of the same message, so we discard the parsed bits
-           */
-          GByteArray *data = g_bytes_unref_to_array (bytes);
-          g_byte_array_remove_range (data, current_index, parsed_length);
-          bytes = g_byte_array_free_to_bytes (data);
-        } else {
-          /* the data send was incomplete and further reads might result
-           * in a more complete message
-           * store already read buffer and scehdule another read to obtain
-           * the rest of it
-           */
-          context->pending_buffer = g_bytes_unref_to_array (bytes);
-          g_byte_array_remove_range (context->pending_buffer,
-                                     0,
-                                     current_index);
-          g_input_stream_read_bytes_async (istream,
-                                           SINGLE_READ_COUNT,
-                                           context->priority,
-                                           cancellable,
-                                           read_cb,
-                                           g_steal_pointer (&task));
-          return;
-        }
-      } else if (error != NULL) {
-        g_task_return_error (task, g_steal_pointer (&error));
-        g_bytes_unref (bytes);
-        return;
-      } else {
-        g_queue_push_tail (messages, message);
-      }
-      current_index = parsed_length;
-    }
-  }
-
-  if (bytes != NULL)
-    g_bytes_unref (bytes);
-
-  g_task_return_pointer (task, messages, g_object_unref);
-}
-
-void
-read_async (GmpackServer        *self,
-            GInputStream        *istream,
-            GCancellable        *cancellable,
-            GAsyncReadyCallback  callback,
-            gpointer             user_data)
-{
-  GmpackSession *session;
-  ReadContext *context = NULL;
-  g_autoptr(GTask) task = NULL;
-
-  session = g_hash_table_lookup (self->io_sessions, istream);
-  g_assert (GMPACK_IS_SESSION (session));
-
-  context = g_slice_new0 (ReadContext);
-  context->priority = G_PRIORITY_LOW;
-  context->pending_buffer= NULL;
-  context->session = g_object_ref (session);
-
-  task = g_task_new (self, cancellable, callback, user_data);
-  g_task_set_task_data (task, context, read_context_free);
-  g_task_set_priority (task, context->priority);
-
-  g_input_stream_read_bytes_async (istream,
-                                   SINGLE_READ_COUNT,
-                                   context->priority,
-                                   cancellable,
-                                   read_cb,
-                                   g_steal_pointer (&task));
-}
-
-GQueue *
-read_finish (GmpackServer  *self,
-             GAsyncResult   *result,
-             GError        **error)
-{
-  g_return_val_if_fail (g_task_is_valid (result, self), FALSE);
-
-  return g_task_propagate_pointer (G_TASK (result), error);
-}
-
-static void
 listen_cb (GObject      *object,
            GAsyncResult *result,
            gpointer      user_data)
@@ -417,11 +263,12 @@ listen_cb (GObject      *object,
   GError *error = NULL;
   GInputStream *istream = user_data;
   GmpackServer *self = (GmpackServer *)object;
+  GmpackSession *session = NULL;
 
   g_assert (G_IS_INPUT_STREAM (istream));
   g_assert (GMPACK_IS_SERVER (self));
 
-  messages = read_finish (self, result, &error);
+  messages = gmpack_read_istream_finish (G_OBJECT (self), result, &error);
   if (messages != NULL) {
     while (g_queue_get_length (messages) > 0) {
       GmpackMessage *message = NULL;
@@ -444,7 +291,16 @@ listen_cb (GObject      *object,
     }
     g_queue_free (messages);
   }
-  read_async (self, istream, NULL, listen_cb, istream);
+
+  session = g_hash_table_lookup (self->io_sessions, istream);
+  g_assert (GMPACK_IS_SESSION (session));
+
+  gmpack_read_istream_async (G_OBJECT (self),
+                             istream,
+                             session,
+                             NULL,
+                             listen_cb,
+                             istream);
 }
 
 void
@@ -460,14 +316,23 @@ gmpack_server_accept_io_stream (GmpackServer  *self,
 
   istream = g_io_stream_get_input_stream (iostream);
   ostream = g_io_stream_get_output_stream (iostream);
-  session = gmpack_session_new ();
 
+  g_assert (G_IS_INPUT_STREAM (istream));
+  g_assert (G_IS_OUTPUT_STREAM (ostream));
   g_return_if_fail (
-    g_hash_table_lookup (self->connected_io_streams, iostream) == NULL);
+    g_hash_table_lookup (self->connected_io_streams, istream) == NULL);
 
   g_hash_table_insert (self->connected_io_streams, istream, ostream);
+
+  session = gmpack_session_new ();
   g_hash_table_insert (self->io_sessions, istream, session);
-  read_async (self, istream, NULL, listen_cb, istream);
+
+  gmpack_read_istream_async (G_OBJECT (self),
+                             istream,
+                             session,
+                             NULL,
+                             listen_cb,
+                             istream);
 }
 
 static gboolean
@@ -482,7 +347,7 @@ incoming_cb (GSocketService    *server,
   g_assert (GMPACK_IS_SERVER (self));
 
   gmpack_server_accept_io_stream (self,
-                                  G_IO_STREAM (connection),
+                                  G_IO_STREAM (g_object_ref (connection)),
                                   &error);
   if (error != NULL) {
     g_error ("While listening to incoming connection: %s", error->message);
@@ -511,8 +376,10 @@ gmpack_server_listen_at_port (GmpackServer  *self,
                                     port,
                                     NULL,
                                     error);
-  if (error != NULL)
+  if (*error != NULL) {
+    g_error ("%s\n", (*error)->message);
     return;
+  }
 
   self->tcp_service = service;
   self->tcp_port = port;

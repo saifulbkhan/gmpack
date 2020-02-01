@@ -21,7 +21,7 @@ struct _GmpackMessage
 {
   GObject               parent_instance;
   GmpackMessageRpcType  rpc_type;
-  gint                  rpc_id;
+  guint32               rpc_id;
   gpointer              data;
   GVariant             *procedure;
   GVariant             *args;
@@ -82,7 +82,7 @@ gmpack_message_set_rpc_type (GmpackMessage        *self,
 }
 
 void
-gmpack_message_set_rpc_id (GmpackMessage *self, gint rpc_id)
+gmpack_message_set_rpc_id (GmpackMessage *self, guint32 rpc_id)
 {
   self->rpc_id = rpc_id;
 }
@@ -123,7 +123,7 @@ gmpack_message_get_rpc_type (GmpackMessage *self)
   return self->rpc_type;
 }
 
-gint
+guint32
 gmpack_message_get_rpc_id (GmpackMessage *self)
 {
   return self->rpc_id;
