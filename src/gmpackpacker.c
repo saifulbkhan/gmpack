@@ -56,7 +56,7 @@ gmpack_packer_finalize (GObject *object)
 
   /* We avoid freeing the root variant, created by user */
   self->root = NULL;
-  g_free (self->parser);
+  free (self->parser);
 
   G_OBJECT_CLASS (gmpack_packer_parent_class)->finalize (object);
 }
@@ -93,15 +93,23 @@ gmpack_unparse_enter (mpack_parser_t *parser,
                                     parent->tok.length);
       return;
     } else if (parent->tok.type == MPACK_TOKEN_BIN) {
-      node->tok = mpack_pack_chunk (g_variant_get_bytestring (parent_var),
-                                    parent->tok.length);
+      gsize length = 0;
+      gconstpointer binary_data = g_variant_get_fixed_array (parent_var,
+                                                             &length,
+                                                             sizeof (guint8));
+      g_return_if_fail (length == parent->tok.length);
+      node->tok = mpack_pack_chunk (binary_data, length);
       return;
     } else if (parent->tok.type == MPACK_TOKEN_EXT) {
-      gchar *bytestring;
-      gint64 ext_code;
-      g_variant_get (parent_var, "(iay)", &ext_code, &bytestring);
-      node->tok = mpack_pack_chunk (bytestring, parent->tok.length);
-      g_free (bytestring);
+      GVariant *tmp = NULL;
+      gconstpointer binary_data = NULL;
+      gsize length = 0;
+
+      g_variant_get (parent_var, "(i@ay)", NULL, &tmp);
+      binary_data = g_variant_get_fixed_array (tmp, &length, sizeof (guint8));
+      node->tok = mpack_pack_chunk (binary_data, length);
+
+      g_variant_unref (tmp);
       return;
     }
 
@@ -137,20 +145,18 @@ gmpack_unparse_enter (mpack_parser_t *parser,
     node->tok = mpack_pack_sint (g_variant_get_int64 (var));
   } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE_DOUBLE)) {
     node->tok = mpack_pack_float (g_variant_get_double (var));
-  } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE_BYTESTRING)) {
-    gsize length;
-    g_free ((g_variant_dup_bytestring (var, &length)));
-    node->tok = mpack_pack_bin (length);
+  } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE ("ay"))) {
+    node->tok = mpack_pack_bin (g_variant_n_children (var));
   } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE_STRING)) {
     gsize length;
     g_free (g_variant_dup_string (var, &length));
     node->tok = mpack_pack_str (length);
   } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE ("(iay)"))) {
-    gchar *bytestring;
-    gint64 ext_code;
-    g_variant_get (var, "(iay)", &ext_code, &bytestring);
-    node->tok = mpack_pack_ext (ext_code, strlen(bytestring));
-    g_free (bytestring);
+    gint32 ext_code;
+    GVariant *tmp = NULL;
+    g_variant_get (var, "(i@ay)", &ext_code, &tmp);
+    node->tok = mpack_pack_ext (ext_code, g_variant_n_children (tmp));
+    g_variant_unref (tmp);
   } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE ("av"))) {
     node->tok = mpack_pack_array (g_variant_n_children (var));
   } else if (g_variant_type_equal (var_type, G_VARIANT_TYPE ("a(vv)"))) {

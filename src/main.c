@@ -34,10 +34,7 @@ gint pack_unpack_test ()
   GVariant *obj = NULL;
   gchar *str = NULL;
   gsize length = 46;
-  const gchar *data = "\x92\x82\xa7\x63\x6f\x6d\x70\x61\x63\x74\xc3\xa6"
-                      "\x73\x63\x68\x65\x6d\x61\x00\x82\xa0\xcf\xdc\xc8"
-                      "\x0c\xd4\x00\x00\x00\x00\xa6\x6e\x65\x67\x20\x50"
-                      "\x69\xcb\xc0\x09\x1e\xb8\x51\xeb\x85\x1f";
+  const gchar *data = "\xd7\x04\x40\x41\x42\x43\x44\x45\x46\x47";
   GmpackUnpacker *unpacker = gmpack_unpacker_new ();
   obj = gmpack_unpacker_unpack_string (unpacker, &data, &length, &error);
   g_object_unref (unpacker);

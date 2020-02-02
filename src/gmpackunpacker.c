@@ -27,7 +27,7 @@ struct _GmpackUnpacker
   mpack_parser_t *parser;
   gboolean        unpacking;
   GVariant       *root;
-  gchar          *string_buffer;
+  gpointer        buffer;
 };
 
 G_DEFINE_TYPE (GmpackUnpacker, gmpack_unpacker, G_TYPE_OBJECT)
@@ -46,7 +46,7 @@ gmpack_unpacker_init (GmpackUnpacker *self)
   }
   mpack_parser_init (self->parser, 0);
   self->parser->data.p = (void *) self;
-  self->string_buffer = NULL;
+  self->buffer = NULL;
   self->unpacking = FALSE;
   self->root = NULL;
 }
@@ -56,9 +56,10 @@ gmpack_unpacker_finalize (GObject *object)
 {
   GmpackUnpacker *self = GMPACK_UNPACKER (object);
 
-  g_free (self->parser);
+  free (self->parser);
   g_variant_unref (self->root);
-  g_free (self->string_buffer);
+  if (self->buffer != NULL)
+    free (self->buffer);
 
   G_OBJECT_CLASS (gmpack_unpacker_parent_class)->finalize (object);
 }
@@ -106,8 +107,8 @@ gmpack_parse_enter(mpack_parser_t *parser,
     }
     case MPACK_TOKEN_CHUNK: {
       /* chunks should always follow string/bin/ext tokens */
-      assert (unpacker->string_buffer != NULL);
-      memcpy (unpacker->string_buffer + MPACK_PARENT_NODE (node)->pos,
+      g_assert (unpacker->buffer != NULL);
+      memcpy (unpacker->buffer + MPACK_PARENT_NODE (node)->pos,
               node->tok.data.chunk_ptr,
               node->tok.length);
       break;
@@ -115,8 +116,8 @@ gmpack_parse_enter(mpack_parser_t *parser,
     case MPACK_TOKEN_BIN:
     case MPACK_TOKEN_STR:
     case MPACK_TOKEN_EXT: {
-      unpacker->string_buffer = malloc (node->tok.length);
-      assert (unpacker->string_buffer != NULL);
+      unpacker->buffer = malloc (node->tok.length);
+      g_assert (unpacker->buffer != NULL);
       break;
     }
     case MPACK_TOKEN_ARRAY: {
@@ -149,24 +150,29 @@ gmpack_parse_exit(mpack_parser_t *parser,
     case MPACK_TOKEN_CHUNK:
       return;
     case MPACK_TOKEN_STR:
-      var = g_variant_new_take_string (g_strndup (unpacker->string_buffer,
+      var = g_variant_new_take_string (g_strndup (unpacker->buffer,
                                                   node->tok.length));
-      unpacker->string_buffer = NULL;
+      free (unpacker->buffer);
+      unpacker->buffer = NULL;
       break;
     case MPACK_TOKEN_BIN:
-      var = g_variant_new_bytestring (g_strndup (unpacker->string_buffer,
-                                                 node->tok.length));
-      g_free (unpacker->string_buffer);
-      unpacker->string_buffer = NULL;
+      var = g_variant_new_fixed_array (G_VARIANT_TYPE_BYTE,
+                                       unpacker->buffer,
+                                       node->tok.length,
+                                       sizeof (guint8));
+      free (unpacker->buffer);
+      unpacker->buffer = NULL;
       break;
-    case MPACK_TOKEN_EXT:
-      var = g_variant_new ("(iay)",
-                           node->tok.data.ext_type,
-                           g_strndup (unpacker->string_buffer,
-                                      node->tok.length));
-      g_free (unpacker->string_buffer);
-      unpacker->string_buffer = NULL;
+    case MPACK_TOKEN_EXT: {
+      GVariant *tmp = g_variant_new_fixed_array (G_VARIANT_TYPE_BYTE,
+                                                 unpacker->buffer,
+                                                 node->tok.length,
+                                                 sizeof (guint8));
+      var = g_variant_new ("(i@ay)", node->tok.data.ext_type, tmp);
+      free (unpacker->buffer);
+      unpacker->buffer = NULL;
       break;
+    }
     case MPACK_TOKEN_ARRAY:
     case MPACK_TOKEN_MAP:
       builder = (GVariantBuilder *) obj;
