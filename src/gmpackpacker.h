@@ -27,7 +27,6 @@ G_BEGIN_DECLS
 /* Error flags */
 typedef enum
 {
-  GMPACK_PACKER_ERROR_BUSY, /* packer is busy packing another variant */
   GMPACK_PACKER_ERROR_MEMORY, /* memory allocation failed during packing */
   GMPACK_PACKER_ERROR_PARSER, /* bad parser state, cannot proceed */
   GMPACK_PACKER_ERROR_MISC /* unknown or miscellaneous error */
@@ -41,7 +40,6 @@ gsize gmpack_packer_pack_variant (GmpackPacker *object,
                                   GVariant     *variant,
                                   gchar       **string,
                                   GError      **error);
-gboolean gmpack_packer_is_busy (GmpackPacker *object);
 
 G_END_DECLS
 

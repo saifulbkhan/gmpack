@@ -25,7 +25,6 @@ struct _GmpackPacker
 {
   GObject         parent_instance;
   mpack_parser_t *parser;
-  gboolean        packing;
   GVariant       *root;
 };
 
@@ -45,7 +44,6 @@ gmpack_packer_init (GmpackPacker *self)
   }
   mpack_parser_init (self->parser, 0);
   self->parser->data.p = (void *) self;
-  self->packing = FALSE;
   self->root = NULL;
 }
 
@@ -193,14 +191,6 @@ gmpack_packer_pack_variant (GmpackPacker *self,
   gsize buffer_size = 0;
   gsize buffer_left = 0;
 
-  if (self->packing) {
-    g_set_error (error,
-                 GMPACK_PACKER_ERROR,
-                 GMPACK_PACKER_ERROR_BUSY,
-                 "This packer instance is already working.");
-    return -1;
-  }
-
   buffer_size = 16;
   buffer = g_malloc (sizeof (*buffer) * buffer_size);
   if (!buffer) {
@@ -216,7 +206,6 @@ gmpack_packer_pack_variant (GmpackPacker *self,
   self->root = variant;
   do {
     gsize buffer_left_init = buffer_left;
-    self->packing = TRUE;
     result = mpack_unparse (self->parser,
                             &buffer_cursor,
                             &buffer_left,
@@ -226,7 +215,6 @@ gmpack_packer_pack_variant (GmpackPacker *self,
     if (result == MPACK_NOMEM) {
       self->parser = gmpack_grow_parser (self->parser);
       if (!self->parser) {
-        self->packing = FALSE;
         g_set_error (error,
                      GMPACK_PACKER_ERROR,
                      GMPACK_PACKER_ERROR_PARSER,
@@ -253,12 +241,5 @@ gmpack_packer_pack_variant (GmpackPacker *self,
   memcpy (final_buffer, buffer, length);
   free (buffer);
   *str = final_buffer;
-  self->packing = FALSE;
   return length;
-}
-
-gboolean
-gmpack_packer_is_busy (GmpackPacker *self)
-{
-  return self->packing;
 }

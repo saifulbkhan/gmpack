@@ -25,7 +25,6 @@ struct _GmpackUnpacker
 {
   GObject         parent_instance;
   mpack_parser_t *parser;
-  gboolean        unpacking;
   GVariant       *root;
   gpointer        buffer;
 };
@@ -47,7 +46,6 @@ gmpack_unpacker_init (GmpackUnpacker *self)
   mpack_parser_init (self->parser, 0);
   self->parser->data.p = (void *) self;
   self->buffer = NULL;
-  self->unpacking = FALSE;
   self->root = NULL;
 }
 
@@ -218,16 +216,7 @@ gmpack_unpacker_unpack_string (GmpackUnpacker *self,
 {
   int result;
 
-  if (self->unpacking) {
-    g_set_error (error,
-                 GMPACK_UNPACKER_ERROR,
-                 GMPACK_UNPACKER_ERROR_BUSY,
-                 "Unpacker is busy unpacking another string.");
-    return NULL;
-  }
-
   do {
-    self->unpacking = TRUE;
     result = mpack_parse (self->parser,
                           string,
                           length,
@@ -237,7 +226,6 @@ gmpack_unpacker_unpack_string (GmpackUnpacker *self,
     if (result == MPACK_NOMEM) {
       self->parser = gmpack_grow_parser (self->parser);
       if (!self->parser) {
-        self->unpacking = FALSE;
         g_set_error (error,
                      GMPACK_UNPACKER_ERROR,
                      GMPACK_UNPACKER_ERROR_PARSER,
@@ -259,12 +247,5 @@ gmpack_unpacker_unpack_string (GmpackUnpacker *self,
                  "Incomplete msgpack string.");
   }
 
-  self->unpacking = FALSE;
   return self->root;
-}
-
-gboolean
-gmpack_unpacker_is_busy (GmpackUnpacker *self)
-{
-  return self->unpacking;
 }
