@@ -90,12 +90,23 @@ gmpack_parse_enter(mpack_parser_t *parser,
     }
     case MPACK_TOKEN_UINT: {
       guint64 value = (guint64) mpack_unpack_uint (node->tok);
-      obj = (GObject *) g_variant_new_uint64 (value);
+      guint64 value_as_32 = (value << 32) >> 32;
+      if (value == value_as_32) {
+        obj = (GObject *) g_variant_new_uint32 ((guint32) value);
+      } else {
+        obj = (GObject *) g_variant_new_uint64 (value);
+      }
       break;
     }
     case MPACK_TOKEN_SINT: {
       gint64 value = (gint64) mpack_unpack_sint (node->tok);
-      obj = (GObject *) g_variant_new_int64 (value);
+      gint64 value_as_32 = (value << 32) >> 32;
+      if (value == value_as_32) {
+        obj = (GObject *) g_variant_new_int32 ((gint32) value);
+      }
+      else {
+        obj = (GObject *) g_variant_new_int64 (value);
+      }
       break;
     }
     case MPACK_TOKEN_FLOAT: {
