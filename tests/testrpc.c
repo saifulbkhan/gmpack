@@ -106,7 +106,8 @@ client_request_cb (GObject      *object,
 static void
 client_request (const gchar *method,
                 GList       *args,
-                GVariant    *expected_result)
+                GVariant    *expected_result,
+                gboolean     should_error)
 {
   gboolean success = FALSE;
   g_autoptr (GError) error = NULL;
@@ -123,7 +124,7 @@ client_request (const gchar *method,
                                    NULL,
                                    &error);
   g_assert_no_error (error);
-  g_assert_true (success);
+  g_assert_false (success == should_error);
   g_assert_cmpvariant (expected_result, actual_result);
   g_variant_unref (actual_result);
   actual_result = NULL;
@@ -154,7 +155,7 @@ client_request_proper ()
   arg = g_variant_new_parsed ("int32 -1");
   args = g_list_append (args, g_variant_ref (arg));
 
-  client_request ("add", args, g_variant_new_parsed ("uint32 0"));
+  client_request ("add", args, g_variant_new_parsed ("uint32 0"), FALSE);
 
   g_list_free_full (args, (GDestroyNotify) g_variant_unref);
   return FALSE;
@@ -171,7 +172,7 @@ client_request_improper ()
   arg = g_variant_new_parsed ("@ay []");
   args = g_list_prepend (args, g_variant_ref (arg));
 
-  client_request ("add", args, g_variant_new_string (ERROR_STRING));
+  client_request ("add", args, g_variant_new_string (ERROR_STRING), TRUE);
 
   g_list_free_full (args, (GDestroyNotify) g_variant_unref);
   return FALSE;
@@ -185,7 +186,7 @@ client_notify ()
                                                                1500);
 
   gmpack_client_notify (client,
-                        "add",
+                        "event-happened",
                         NULL,
                         NULL,
                         &error);

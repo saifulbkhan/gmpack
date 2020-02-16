@@ -122,6 +122,7 @@ handle_call_thread (GTask         *task,
                     gpointer       task_data,
                     GCancellable  *cancellable)
 {
+  gboolean call_errored = FALSE;
   GError *error = NULL;
   GVariant *result = NULL;
   GBytes *to_write = NULL;
@@ -140,13 +141,13 @@ handle_call_thread (GTask         *task,
 
   result = rpc_data->method_data->handler (rpc_data->args,
                                            method_data->user_data,
-                                           &error);
+                                           &call_errored);
 
-  if (!error && rpc_data->rpc_type == GMPACK_MESSAGE_RPC_TYPE_REQUEST) {
+  if (rpc_data->rpc_type == GMPACK_MESSAGE_RPC_TYPE_REQUEST) {
     to_write = gmpack_session_respond (session,
                                        rpc_data->rpc_id,
                                        result,
-                                       FALSE,
+                                       call_errored,
                                        &error);
   }
 

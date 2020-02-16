@@ -26,9 +26,9 @@ G_BEGIN_DECLS
 #define GMPACK_SERVER_TYPE gmpack_server_get_type ()
 G_DECLARE_FINAL_TYPE (GmpackServer, gmpack_server, GMPACK, SERVER, GObject)
 
-typedef GVariant * (*GmpackServerHandler) (GList     *args,
-                                           gpointer   user_data,
-                                           GError   **error);
+typedef GVariant * (*GmpackServerHandler) (GList    *args,
+                                           gpointer  user_data,
+                                           gboolean *call_errored);
 
 GmpackServer *gmpack_server_new (void);
 void gmpack_server_accept_io_stream (GmpackServer  *self,

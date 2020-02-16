@@ -33,19 +33,32 @@ static GOptionEntry entries[] =
   { NULL }
 };
 
+static gboolean notified = FALSE;
+
 static GVariant *
-addition_handler (GList     *args,
-                  gpointer   user_data,
-                  GError   **error)
+event_handler (GList    *args,
+               gpointer  user_data,
+               gboolean *call_erorred)
+{
+  notified = TRUE;
+  return NULL;
+}
+
+static GVariant *
+addition_handler (GList    *args,
+                  gpointer  user_data,
+                  gboolean *call_errored)
 {
   GVariant *v1 = g_list_nth_data (args, 0);
   GVariant *v2 = g_list_nth_data (args, 1);
   if (g_variant_is_of_type (v1, G_VARIANT_TYPE_UINT32)
       && g_variant_is_of_type (v2, G_VARIANT_TYPE_INT32)) {
+    *call_errored = FALSE;
     guint32 first = g_variant_get_uint32 (v1);
     gint32 second = g_variant_get_int32 (v2);
     return g_variant_new_int32 (first + second);
   }
+  *call_errored = TRUE;
   return g_variant_new_string (error_string);
 }
 
@@ -59,6 +72,7 @@ run_server ()
   g_assert_no_error (error);
 
   gmpack_server_bind (server, "add", addition_handler, NULL, NULL);
+  gmpack_server_bind (server, "event-happened", event_handler, NULL, NULL);
   return FALSE;
 }
 
@@ -67,6 +81,11 @@ exit_loop (gpointer user_data)
 {
   GMainLoop *loop = user_data;
   g_main_loop_quit (loop);
+  if (!notified) {
+    g_warning ("Was expecting a notification, but process timed out");
+    exit(1);
+  }
+
   return TRUE;
 }
 
@@ -74,7 +93,7 @@ int
 main (int argc, char *argv[])
 {
   GError *error = NULL;
-  GOptionContext *context;
+  GOptionContext *context = NULL;
   GMainLoop *loop = g_main_loop_new (NULL, FALSE);
 
   context = g_option_context_new ("- run dummy server for testing RPC calls");
