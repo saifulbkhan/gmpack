@@ -32,7 +32,6 @@ gboolean gmpack_client_request (GmpackClient  *self,
                                 const gchar   *method,
                                 GList         *args,
                                 GVariant     **result,
-                                gpointer       user_data,
                                 GCancellable  *cancellable,
                                 GError       **error);
 void gmpack_client_request_async (GmpackClient         *self,

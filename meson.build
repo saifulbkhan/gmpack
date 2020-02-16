@@ -15,4 +15,4 @@ add_project_arguments([
 ], language: 'c')
 
 subdir('src')
-
+subdir('tests')

@@ -1,4 +1,4 @@
-gmpack_sources = [
+libgmpack_sources = [
   'mpack.c',
   'gmpackclient.c',
   'gmpackmessage.c',
@@ -8,21 +8,29 @@ gmpack_sources = [
   'gmpackunpacker.c'
 ]
 
-gmpack_main = [ 'main.c' ]
-gmpack_server = [ 'runserver.c' ]
+libgmpack_headers = [
+  'gmpackclient.h',
+  'gmpackmessage.h',
+  'gmpackpacker.h',
+  'gmpackserver.h',
+  'gmpacksession.h',
+  'gmpackunpacker.h'
+]
 
-gmpack_deps = [
+libgmpack_deps = [
   dependency('glib-2.0'),
   dependency('gobject-2.0'),
   dependency('gio-2.0'),
 ]
 
-executable('gmpack', gmpack_sources + gmpack_main,
-  dependencies: gmpack_deps,
+libgmpack = library('gmpack-' + meson.project_version(),
+  libgmpack_sources + libgmpack_headers,
+  dependencies: libgmpack_deps,
   install: true,
 )
 
-executable('gmpack-server', gmpack_sources + gmpack_server,
-  dependencies: gmpack_deps,
-  install: true,
+libgmpack_as_dep = declare_dependency(
+  dependencies: libgmpack_deps,
+  link_with: libgmpack,
+  include_directories: include_directories('.'),
 )

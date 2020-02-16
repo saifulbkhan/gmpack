@@ -202,7 +202,6 @@ gmpack_client_request (GmpackClient  *self,
                        const gchar   *method,
                        GList         *args,
                        GVariant     **result,
-                       gpointer       user_data,
                        GCancellable  *cancellable,
                        GError       **error)
 {
@@ -224,7 +223,7 @@ gmpack_client_request (GmpackClient  *self,
   data = gmpack_session_request (session,
                                  g_variant_new_string (method),
                                  args_var,
-                                 user_data,
+                                 NULL,
                                  &request_id,
                                  error);
   g_return_val_if_fail (*error == NULL, FALSE);
